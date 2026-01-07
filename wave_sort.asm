@@ -2,10 +2,10 @@
 ; Wave Sort - Highly Optimized AMD64 Assembly Implementation
 ; Target: AMD64 (x86_64) with AVX2 support
 ; Enhancements:
-;   - AVX2 Vectorized Block Swaps (block_swap_sr) with hazard fix
+;   - AVX2 Vectorized Block Swaps (block_swap_sr) Unrolled x2
+;   - AVX2 Partitioning Unrolled x2 with Correct Mask Logic
 ;   - Cache Prefetching (partition)
 ;   - 16-byte Loop Alignment
-;   - Minimized Branching Overhead
 ; ==============================================================================
 
 section .text
@@ -34,8 +34,7 @@ swap:
 ; Function: block_swap_sl
 ; Signature: void block_swap_sl(int32_t *arr, size_t m, size_t p, size_t ll)
 ; Params: RDI=arr, RSI=m, RDX=p, RCX=ll
-; Note: This implements a "Juggling Algorithm" logic which is inherently scalar
-; due to its strided/random-access nature depending on GCD(n,k).
+; Note: This implements a "Juggling Algorithm" logic which is inherently scalar.
 ; ==============================================================================
 align 16
 block_swap_sl:
@@ -115,7 +114,7 @@ block_swap_sl:
 ; Function: block_swap_sr
 ; Signature: void block_swap_sr(int32_t *restrict arr, size_t m, size_t r, size_t p)
 ; Params: RDI=arr, RSI=m, RDX=r, RCX=p
-; Optimized: Uses AVX2 to process 8 elements per iteration.
+; Optimized: Uses AVX2 Unrolled (16 elements/iter)
 ; Logic:
 ;   while (j < p) {
 ;       arr[i] = arr[j];
@@ -131,39 +130,61 @@ block_swap_sr:
     mov     r8d, [rdi + rsi*4] ; r8d = tmp
     ; j = r  (RDX)
 
-    ; Check if we can use AVX2 (need at least 8 elements)
-    ; condition: j + 8 <= p
-    lea     rax, [rdx + 8]
+    ; Check if we can use AVX2 Unrolled (need at least 16 elements)
+    ; condition: j + 16 <= p
+    lea     rax, [rdx + 16]
     cmp     rax, rcx
-    ja      .sr_scalar_loop
+    ja      .sr_check_single_vec
 
     align 16
-.sr_avx_loop:
-    ; Loop Guard: check if j + 8 <= p
+.sr_avx_unrolled_loop:
+    ; Loop Guard: check if j + 16 <= p
+    lea     rax, [rdx + 16]
+    cmp     rax, rcx
+    ja      .sr_check_single_vec
+
+    ; UNROLLED BLOCK 1 (First 8 elements)
+    ; 1. Load 8 elements from arr[j] -> YMM0
+    vmovdqu ymm0, [rdi + rdx*4]
+    ; 2. Load 8 elements from arr[i+1] -> YMM1 (Unaligned)
+    vmovdqu ymm1, [rdi + rsi*4 + 4]
+    
+    ; UNROLLED BLOCK 2 (Next 8 elements)
+    ; 3. Load 8 elements from arr[j+8] -> YMM2
+    vmovdqu ymm2, [rdi + rdx*4 + 32]
+    ; 4. Load 8 elements from arr[i+9] -> YMM3 (Unaligned)
+    vmovdqu ymm3, [rdi + rsi*4 + 36] ; (i+8)+1 = i+9. Offset 32+4=36.
+
+    ; STORE BLOCK 1
+    ; 5. Store YMM0 to arr[i]
+    vmovdqu [rdi + rsi*4], ymm0
+    ; 6. Store YMM1 to arr[j]
+    vmovdqu [rdi + rdx*4], ymm1
+
+    ; STORE BLOCK 2
+    ; 7. Store YMM2 to arr[i+8]
+    vmovdqu [rdi + rsi*4 + 32], ymm2
+    ; 8. Store YMM3 to arr[j+8]
+    vmovdqu [rdi + rdx*4 + 32], ymm3
+
+    ; Increment indices by 16
+    add     rsi, 16
+    add     rdx, 16
+    jmp     .sr_avx_unrolled_loop
+
+.sr_check_single_vec:
+    ; Check if we can process remaining 8 elements
     lea     rax, [rdx + 8]
     cmp     rax, rcx
     ja      .sr_scalar_loop
 
-    ; CRITICAL FIX: Load ALL data before writing to avoid read-after-write hazard.
-    ; Because arr[i+1...i+8] overlaps with destination arr[i...i+7],
-    ; we MUST load arr[i+1] before we overwrite arr[i].
-
-    ; 1. Load 8 elements from arr[j] -> YMM0
+    ; Single Vector Block (8 elements)
     vmovdqu ymm0, [rdi + rdx*4]
-
-    ; 2. Load 8 elements from arr[i+1] -> YMM1 (Unaligned load)
     vmovdqu ymm1, [rdi + rsi*4 + 4]
-
-    ; 3. Store YMM0 to arr[i]
     vmovdqu [rdi + rsi*4], ymm0
-
-    ; 4. Store YMM1 to arr[j]
     vmovdqu [rdi + rdx*4], ymm1
-
-    ; Increment indices by 8
     add     rsi, 8
     add     rdx, 8
-    jmp     .sr_avx_loop
 
     align 16
 .sr_scalar_loop:
@@ -177,8 +198,6 @@ block_swap_sr:
     inc     rsi      ; i++
     
     ; arr[j] = arr[i]
-    ; Note: 'i' here is the incremented i, so it points to the NEXT element.
-    ; This scalar order is safe naturally.
     mov     r9d, [rdi + rsi*4]
     mov     [rdi + rdx*4], r9d
     
@@ -243,7 +262,7 @@ block_swap:
 ; Function: partition
 ; Signature: size_t partition(int32_t *arr, size_t l, size_t r, size_t p_idx)
 ; Returns: i (RAX)
-; Optimized: AVX2 Scanning + Software Prefetching
+; Optimized: AVX2 Unrolled Scanning (2 vectors/iter) + Prefetch
 ; ==============================================================================
 align 16
 partition:
@@ -270,33 +289,84 @@ partition:
     cmp     rax, r8     ; if (i == j)
     je      .part_done
 
-    ; AVX2 Check
+    ; Check if at least 16 elements (2 vectors) can be scanned
     mov     r9, r8
     sub     r9, rax
+    cmp     r9, 16
+    jl      .scan_i_single_check
+
+    ; Prefetch cache lines (128 bytes ahead)
+    prefetcht0 [rdi + rax*4 + 128]
+
+    ; Load 2 vectors (16 elements)
+    vmovdqu ymm1, [rdi + rax*4]       ; i ... i+7
+    vmovdqu ymm2, [rdi + rax*4 + 32]  ; i+8 ... i+15
+
+    ; Compare both against pivot
+    ; VPCMPGTD dest, src1, src2 -> dest = (src1 > src2) -> (Pivot > Val)
+    ; We want to stop if (Val >= Pivot) -> NOT (Pivot > Val)
+    ; So we need mask bits to be 1. If any is 0, we stop.
+    
+    vpcmpgtd ymm3, ymm0, ymm1
+    vpcmpgtd ymm4, ymm0, ymm2
+
+    ; Extract masks individually. Do NOT vpor.
+    vpmovmskb r9d, ymm3
+    vpmovmskb r11d, ymm4
+
+    ; Check if both are "all 1s" (0xFFFFFFFF for dwords, but vpmovmskb on ymm gives 32 bits)
+    ; If (r9d == -1) AND (r11d == -1), then we continue.
+    ; Use RCX as temp (it was p_idx, now free).
+    mov     ecx, r9d
+    and     ecx, r11d
+    not     ecx         ; If result is 0, then both were -1 (all 1s).
+    
+    test    ecx, ecx
+    jnz     .found_i_unrolled
+
+    ; Both vectors clean, advance 16
+    add      rax, 15    ; +16 total (inc rax was +1)
+    jmp      .scan_i
+
+.found_i_unrolled:
+    ; One of the elements is >= Pivot. Find it.
+    ; Check first vector (r9d)
+    not      r9d
+    test     r9d, r9d
+    jnz      .resolve_i_vec1
+
+    ; Must be in second vector (r11d)
+    not      r11d
+    tzcnt    r11d, r11d
+    shr      r11d, 2
+    add      rax, 8     ; Offset for second vector
+    add      rax, r11
+    jmp      .break_i
+
+.resolve_i_vec1:
+    tzcnt    r9d, r9d
+    shr      r9d, 2
+    add      rax, r9
+    jmp      .break_i
+
+.scan_i_single_check:
+    ; Fallback for < 16 elements
     cmp     r9, 8
     jl      .scalar_i_check
-
-    ; Prefetch next cache line (heuristic: 64 bytes ahead)
-    prefetcht0 [rdi + rax*4 + 64]
-
-    ; Load 8 elements
-    vmovdqu ymm1, [rdi + rax*4]
     
-    ; Compare GT (Val > Pivot -> Mask=1111)
+    vmovdqu ymm1, [rdi + rax*4]
     vpcmpgtd ymm2, ymm0, ymm1
     vpmovmskb r9d, ymm2
-    not     r9d         ; Invert to find Val >= Pivot (0000 -> 1111)
-    
+    not     r9d
     test    r9d, r9d
-    jz      .advance_i_simd
+    jz      .advance_i_single
 
-    ; Found element >= pivot
     tzcnt   r9d, r9d
     shr     r9d, 2
     add     rax, r9
     jmp     .break_i
 
-.advance_i_simd:
+.advance_i_single:
     add     rax, 7
     jmp     .scan_i
 
@@ -314,39 +384,88 @@ partition:
     cmp     r8, rax
     je      .part_done
 
-    ; AVX2 Check
+    ; Check if at least 16 elements
     mov     r9, r8
     sub     r9, rax
+    cmp     r9, 16
+    jl      .scan_j_single_check
+
+    prefetcht0 [rdi + r8*4 - 128]
+
+    ; Load 2 vectors ending at j
+    ; Vec1: [j-7 ... j]     -> addr: (j-7)*4
+    ; Vec2: [j-15 ... j-8]  -> addr: (j-15)*4 = (j-7)*4 - 32
+    
+    mov     r9, r8
+    sub     r9, 7
+    
+    vmovdqu ymm1, [rdi + r9*4]      ; Vec1 (High indices)
+    vmovdqu ymm2, [rdi + r9*4 - 32] ; Vec2 (Low indices)
+
+    ; We want to stop if (Val <= Pivot).
+    ; VPCMPGTD mask, Val, Pivot -> 1s if Val > Pivot (Keep going)
+    ; 0s if Val <= Pivot (STOP)
+
+    vpcmpgtd ymm3, ymm1, ymm0
+    vpcmpgtd ymm4, ymm2, ymm0
+
+    vpmovmskb r11d, ymm3    ; Vec1 mask (High)
+    vpmovmskb r9d, ymm4     ; Vec2 mask (Low)
+
+    mov     ecx, r11d
+    and     ecx, r9d
+    not     ecx
+    test    ecx, ecx
+    jnz     .found_j_unrolled
+
+    sub     r8, 15      ; -16 total
+    jmp     .scan_j
+
+.found_j_unrolled:
+    ; Check Vec1 (High indices) first because we scan backwards (j--)
+    not      r11d
+    test     r11d, r11d
+    jnz      .resolve_j_vec1
+
+    ; Must be in Vec2 (Low indices)
+    not      r9d
+    bsr      r9d, r9d
+    shr      r9d, 2
+    
+    ; Adjust j. Base for Vec2 is (j-15).
+    sub      r8, 15
+    add      r8, r9
+    jmp      .break_j
+
+.resolve_j_vec1:
+    bsr      r11d, r11d
+    shr      r11d, 2
+    ; Base for Vec1 is (j-7).
+    sub      r8, 7
+    add      r8, r11
+    jmp      .break_j
+
+.scan_j_single_check:
     cmp     r9, 8
     jl      .scalar_j_check
-
-    ; Prefetch prev cache line
-    prefetcht0 [rdi + r8*4 - 64]
 
     mov     r9, r8
     sub     r9, 7
     vmovdqu ymm1, [rdi + r9*4]
-
-    ; Compare GT (Val > Pivot -> Mask=1111)
+    
     vpcmpgtd ymm2, ymm1, ymm0
     vpmovmskb r11d, ymm2
-    not     r11d        ; Invert to find Val <= Pivot
-    
+    not     r11d
     test    r11d, r11d
-    jz      .advance_j_simd
+    jz      .advance_j_single
     
-    ; Found element <= pivot (highest index in vector)
-    ; vpmovmskb packs 32 bits (1 per byte). int32 takes 4 bytes.
-    ; MSB of int32 at index 7 is bit 31.
     bsr     r11d, r11d
     shr     r11d, 2
-    
-    ; Adjust j based on offset
     sub     r8, 7
     add     r8, r11
     jmp     .break_j
 
-.advance_j_simd:
+.advance_j_single:
     sub     r8, 7
     jmp     .scan_j
 
@@ -369,8 +488,7 @@ partition:
     ret
 
 ; ==============================================================================
-; Function: downwave
-; Recursive Logic
+; Function: downwave (Recursion)
 ; ==============================================================================
 align 16
 downwave:
@@ -526,8 +644,7 @@ downwave:
     ret
 
 ; ==============================================================================
-; Function: upwave
-; Recursive Logic
+; Function: upwave (Recursion)
 ; ==============================================================================
 align 16
 upwave:
