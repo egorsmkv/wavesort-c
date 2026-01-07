@@ -1,8 +1,10 @@
-# `wavesort`
+# `wsort`
 
-WaveSort algorithm implemented in C
+Wave Sort algorithm implemented in C and Assembly (with OpenMP parallelization).
 
-## Demo
+## Benchmarks
+
+### C
 
 ```
 Initializing benchmark for 100000000 integer samples...
