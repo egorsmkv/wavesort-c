@@ -21,6 +21,13 @@ Ratio (Wave/Qsort): 0.80x (WaveSort is faster)
 ### Assembly 
 
 ```
+Initializing Wave Sort Test...
+Generating 100000000 random integers...
+Running qsort...
+qsort time: 9.0394 seconds
+Running wave_sort (ASM)...
+wave_sort time: 3.8327 seconds
+SUCCESS: Array is sorted correctly.
 ```
 
 ### Assembly (serial vs. parallel)
