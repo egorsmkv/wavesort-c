@@ -1,6 +1,6 @@
 CC=clang
 ASM=nasm
-CFLAGS=-O3 -Wall -Wextra
+CFLAGS=-O3 -Wall -Wextra -march=native
 ASMFLAGS=-f elf64
 
 all: wavesort_asm
