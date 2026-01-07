@@ -2,6 +2,8 @@
 
 Wave Sort algorithm implemented in C and Assembly (with OpenMP parallelization).
 
+Paper: https://arxiv.org/abs/2505.13552
+
 ## Benchmarks
 
 ### C
