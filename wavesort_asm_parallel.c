@@ -1,3 +1,6 @@
+// nasm -f elf64 -O3 wavesort_parallel.asm -o wavesort_parallel.o
+// clang -std=c11 -fopenmp -mavx2 -mfma -lm -O3 -Wall -Wextra -o wavesort_asm_parallel wavesort_asm_parallel.c wavesort_parallel.o
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -126,7 +129,7 @@ int main(void) {
     printf("Initializing Wave Sort Benchmark...\n");
     printf("Cores available: %d\n", omp_get_max_threads());
     
-    const size_t ARR_SIZE = 5000000;
+    const size_t ARR_SIZE = 100000000;
     int32_t *arr_base = (int32_t*)malloc(ARR_SIZE * sizeof(int32_t));
     int32_t *arr_qsort = (int32_t*)malloc(ARR_SIZE * sizeof(int32_t));
     int32_t *arr_asm = (int32_t*)malloc(ARR_SIZE * sizeof(int32_t));

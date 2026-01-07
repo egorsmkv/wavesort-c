@@ -1,4 +1,5 @@
-// clang -std=c11 -O3 -Wall -Wextra -o wave_sort wavesort_asm.c wavesort.s
+// nasm -f elf64 -O3 wavesort.asm -o wavesort.o
+// clang -std=c11 -mavx2 -mfma -lm -O3 -Wall -Wextra -o wavesort_asm wavesort_asm.c wavesort.o
 
 #include <stdio.h>
 #include <stdlib.h>

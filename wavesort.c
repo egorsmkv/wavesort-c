@@ -1,4 +1,4 @@
-// clang -std=c11 -O3 -march=native -Wall -Wextra -o wave_sort_c wavesort.c
+// clang -std=c11 -mavx2 -mfma -lm -O3 -march=native -Wall -Wextra -o wavesort_c wavesort.c
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -177,7 +177,7 @@ double get_time_sec(void) {
 }
 
 int main(void) {
-    const size_t N = 1000000; // 1 Million
+    const size_t N = 100000000; // 100 Million
     printf("Initializing benchmark for %zu integer samples...\n", N);
 
     // 1. Memory Allocation (Heap preferred for large arrays)
