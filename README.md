@@ -17,3 +17,26 @@ Qsort:    9.737445 seconds
 
 Ratio (Wave/Qsort): 0.80x (WaveSort is faster)
 ```
+
+### Assembly 
+
+```
+```
+
+### Assembly (serial vs. parallel)
+
+```
+Initializing Wave Sort Benchmark...
+Cores available: 24
+Generating 1000000000 random integers...
+
+Running qsort...
+qsort skipped for large array size to save time.
+qsort time: 0.0000 seconds
+
+Running Serial ASM wave_sort...
+Serial ASM time: 39.2279 seconds
+
+Running Parallel C+ASM wave_sort (OMP)...
+Parallel C+ASM time: 7.6819 seconds
+```
