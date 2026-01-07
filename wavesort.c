@@ -1,3 +1,5 @@
+// clang -std=c11 -O3 -Wall -Wextra -o wave_sort_c wavesort.c
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
