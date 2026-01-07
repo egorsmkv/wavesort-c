@@ -1,5 +1,5 @@
 ; ==============================================================================
-; Wave Sort - Highly Optimized AMD64 Assembly Implementation
+; W-Sort - Highly Optimized AMD64 Assembly Implementation
 ; Target: AMD64 (x86_64) with AVX2 support
 ; Enhancements:
 ;   - Parallelism: Kernels exposed for OpenMP/C integration

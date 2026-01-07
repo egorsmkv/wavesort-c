@@ -1,6 +1,6 @@
 # `wsort`
 
-Wave Sort algorithm implemented in C and Assembly (with OpenMP parallelization).
+W-Sort algorithm implemented in C and Assembly (with OpenMP parallelization).
 
 Paper: https://arxiv.org/abs/2505.13552
 
@@ -25,7 +25,7 @@ Ratio (Wave/Qsort): 0.80x (WaveSort is faster)
 ### Assembly 
 
 ```
-Initializing Wave Sort Test...
+Initializing W-Sort Test...
 Generating 100000000 random integers...
 Running qsort...
 qsort time: 9.0394 seconds
@@ -37,7 +37,7 @@ SUCCESS: Array is sorted correctly.
 ### Assembly (serial vs. parallel)
 
 ```
-Initializing Wave Sort Benchmark...
+Initializing W-Sort Benchmark...
 Cores available: 24
 Generating 1000000000 random integers...
 
