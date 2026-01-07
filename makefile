@@ -3,16 +3,16 @@ ASM=nasm
 CFLAGS=-O3 -Wall -Wextra
 ASMFLAGS=-f elf64
 
-all: wave_sort_asm
+all: wavesort_asm
 
-wave_sort.o: wave_sort.asm
-	$(ASM) $(ASMFLAGS) wave_sort.asm -o wave_sort.o
+wavesort.o: wavesort.asm
+	$(ASM) $(ASMFLAGS) wavesort.asm -o wavesort.o
 
 wavesort_asm.o: wavesort_asm.c
 	$(CC) $(CFLAGS) -c wavesort_asm.c -o wavesort_asm.o
 
-wave_sort_asm: wavesort_asm.o wave_sort.o
-	$(CC) $(CFLAGS) wavesort_asm.o wave_sort.o -o wave_sort_asm
+wavesort_asm: wavesort_asm.o wave_sort.o
+	$(CC) $(CFLAGS) wavesort_asm.o wavesort.o -o wavesort_asm
 
 clean:
-	rm -f *.o wave_sort_asm
+	rm -f *.o wavesort_asm
